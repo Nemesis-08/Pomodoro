@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pomodoro Timer</title>
+    <style>
+      :root {
+        --pomodoro-red: #d95550;
+        --break-blue: #4c9195;
+        --dark-bg: #1e1e1e;
+        --light-text: #f5f5f5;
+        --light-gray: #eaeaea;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      }
+
+      body {
+        background-color: #f5f5f5;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        transition: background 0.3s ease;
+      }
+
+      .container {
+        width: 100%;
+        max-width: 500px;
+        background: white;
+        border-radius: 15px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .mode-tabs {
+        display: flex;
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: 15px 15px 0 0;
+      }
+
+      .mode-tab {
+        flex: 1;
+        text-align: center;
+        padding: 15px;
+        cursor: pointer;
+        font-weight: 500;
+        transition: all 0.3s ease;
+        position: relative;
+      }
+
+      .mode-tab.active {
+        font-weight: 600;
+      }
+
+      .mode-tab.active::after {
+        content: "";
+        position: absolute;
+        bottom: 0;
+        left: 0;
+        width: 100%;
+        height: 3px;
+        background: var(--pomodoro-red);
+      }
+
+      .mode-tab:nth-child(2).active::after {
+        background: var(--break-blue);
+      }
+
+      .timer-content {
+        padding: 30px;
+        text-align: center;
+      }
+
+      .timer-display {
+        font-size: 6rem;
+        font-weight: 300;
+        margin: 20px 0;
+        font-feature-settings: "tnum";
+        color: var(--dark-bg);
+      }
+
+      .timer-options {
+        display: flex;
+        justify-content: center;
+        gap: 10px;
+        margin-bottom: 30px;
+      }
+
+      .timer-option {
+        padding: 8px 15px;
+        border-radius: 20px;
+        font-size: 0.9rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: none;
+        background: rgba(0, 0, 0, 0.05);
+      }
+
+      .timer-option.active {
+        background: var(--pomodoro-red);
+        color: white;
+      }
+
+      .break-option.active {
+        background: var(--break-blue);
+      }
+
+      .timer-control {
+        padding: 15px 40px;
+        border-radius: 8px;
+        border: none;
+        background: var(--pomodoro-red);
+        color: white;
+        font-size: 1.1rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 10px rgba(217, 85, 80, 0.3);
+      }
+
+      .timer-control:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 15px rgba(217, 85, 80, 0.4);
+      }
+
+      /* Break mode styles */
+      .break-mode .timer-control {
+        background: var(--break-blue);
+        box-shadow: 0 4px 10px rgba(76, 145, 149, 0.3);
+      }
+
+      .break-mode .timer-control:hover {
+        box-shadow: 0 6px 15px rgba(76, 145, 149, 0.4);
+      }
+
+      /* Notification style */
+      .notification {
+        position: fixed;
+        top: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.7);
+        color: white;
+        padding: 10px 20px;
+        border-radius: 5px;
+        opacity: 0;
+        transition: opacity 0.3s;
+        z-index: 1000;
+      }
+
+      .notification.show {
+        opacity: 1;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Notification element -->
+    <div class="notification" id="notification"></div>
+
+    <!-- Audio element for alarm -->
+    <audio id="alarm-sound" preload="auto">
+      <source
+        src="https://assets.mixkit.co/sfx/preview/mixkit-alarm-digital-clock-beep-989.mp3"
+        type="audio/mpeg"
+      />
+      Your browser does not support the audio element.
+    </audio>
+
+    <div class="container">
+      <div class="mode-tabs">
+        <div class="mode-tab active" data-mode="pomodoro">Pomodoro</div>
+        <div class="mode-tab" data-mode="break">Break</div>
+      </div>
+
+      <div class="timer-content">
+        <div class="timer-options" id="timer-options">
+          <!-- Options will be inserted here by JS -->
+        </div>
+
+        <div class="timer-display" id="timer">25:00</div>
+
+        <button class="timer-control" id="timer-control">START</button>
+      </div>
+    </div>
+
+    <script>
+      // Timer settings
+      const settings = {
+        pomodoro: {
+          options: [
+            { name: "25 min", value: 25 },
+            { name: "50 min", value: 50 },
+          ],
+          defaultTime: 25,
+          color: "var(--pomodoro-red)",
+        },
+        break: {
+          options: [
+            { name: "5 min", value: 5 },
+            { name: "10 min", value: 10 },
+          ],
+          defaultTime: 5,
+          color: "var(--break-blue)",
+        },
+      };
+
+      // DOM elements
+      const timerDisplay = document.getElementById("timer");
+      const timerControl = document.getElementById("timer-control");
+      const timerOptions = document.getElementById("timer-options");
+      const modeTabs = document.querySelectorAll(".mode-tab");
+      const alarmSound = document.getElementById("alarm-sound");
+      const notification = document.getElementById("notification");
+
+      // Timer state
+      let currentMode = "pomodoro";
+      let currentTime = settings.pomodoro.defaultTime * 60;
+      let timerInterval;
+      let isRunning = false;
+
+      // Initialize
+      updateTimerDisplay();
+      renderOptions();
+
+      // Event listeners
+      modeTabs.forEach((tab) => {
+        tab.addEventListener("click", () => {
+          // Update UI
+          modeTabs.forEach((t) => t.classList.remove("active"));
+          tab.classList.add("active");
+
+          // Update mode
+          currentMode = tab.dataset.mode;
+          document.body.className = `${currentMode}-mode`;
+
+          // Reset timer
+          resetTimer();
+
+          // Update options
+          renderOptions();
+        });
+      });
+
+      timerControl.addEventListener("click", toggleTimer);
+
+      // Functions
+      function renderOptions() {
+        timerOptions.innerHTML = "";
+        const options = settings[currentMode].options;
+
+        options.forEach((option, index) => {
+          const button = document.createElement("button");
+          button.className = `timer-option ${index === 0 ? "active" : ""} ${
+            currentMode === "break" ? "break-option" : ""
+          }`;
+          button.textContent = option.name;
+          button.dataset.minutes = option.value;
+
+          button.addEventListener("click", () => {
+            timerOptions.querySelectorAll(".timer-option").forEach((opt) => {
+              opt.classList.remove("active");
+            });
+            button.classList.add("active");
+
+            currentTime = option.value * 60;
+            updateTimerDisplay();
+          });
+
+          timerOptions.appendChild(button);
+        });
+
+        // Set default time
+        currentTime = settings[currentMode].defaultTime * 60;
+        updateTimerDisplay();
+      }
+
+      function toggleTimer() {
+        if (isRunning) {
+          pauseTimer();
+        } else {
+          startTimer();
+        }
+      }
+
+      function startTimer() {
+        isRunning = true;
+        timerControl.textContent = "PAUSE";
+
+        timerInterval = setInterval(() => {
+          currentTime--;
+          updateTimerDisplay();
+
+          if (currentTime <= 0) {
+            clearInterval(timerInterval);
+            isRunning = false;
+            timerControl.textContent = "START";
+
+            // Play alarm sound
+            alarmSound.currentTime = 0;
+            alarmSound.play();
+
+            // Show notification
+            const modeName = currentMode === "pomodoro" ? "Work" : "Break";
+            showNotification(`${modeName} session complete!`);
+          }
+        }, 1000);
+      }
+
+      function pauseTimer() {
+        clearInterval(timerInterval);
+        isRunning = false;
+        timerControl.textContent = "START";
+      }
+
+      function resetTimer() {
+        pauseTimer();
+        currentTime = settings[currentMode].defaultTime * 60;
+        updateTimerDisplay();
+      }
+
+      function updateTimerDisplay() {
+        const minutes = Math.floor(currentTime / 60);
+        const seconds = currentTime % 60;
+        timerDisplay.textContent = `${minutes
+          .toString()
+          .padStart(2, "0")}:${seconds.toString().padStart(2, "0")}`;
+      }
+
+      function showNotification(message) {
+        notification.textContent = message;
+        notification.classList.add("show");
+
+        // Hide after 3 seconds
+        setTimeout(() => {
+          notification.classList.remove("show");
+        }, 3000);
+      }
+    </script>
+  </body>
+</html>
